@@ -21,6 +21,7 @@ pub enum Error {
     Dialog(dialoguer::Error),
     InvalidFlagCommand(String, String),
     InvalidFlagTui(String),
+    InvalidIdentityType(String),
     InvalidPinPolicy(String),
     InvalidSlot(u8),
     InvalidTouchPolicy(String),
@@ -84,6 +85,12 @@ impl fmt::Debug for Error {
                 command = command.as_str(),
             )?,
             Error::InvalidFlagTui(flag) => wlnfl!(f, "err-invalid-flag-tui", flag = flag.as_str())?,
+            Error::InvalidIdentityType(s) => wlnfl!(
+                f,
+                "err-invalid-identity-type",
+                kind = s.as_str(),
+                expected = "tag, tagpq",
+            )?,
             Error::InvalidPinPolicy(s) => wlnfl!(
                 f,
                 "err-invalid-pin-policy",

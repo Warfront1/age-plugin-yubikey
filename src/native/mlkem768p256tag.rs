@@ -69,7 +69,7 @@ pub(crate) fn expand_pq_key(
 
 pub(crate) fn encode_ml_kem_768_seed<T>(
     dk_seed: &[u8; 64],
-    f: impl FnOnce(Extension<&[u8], &[u8]>) -> T,
+    f: impl FnOnce(Extension) -> T,
 ) -> T {
     let extn_value = OctetString::new(dk_seed.to_vec()).expect("valid");
     f(Extension {
@@ -133,7 +133,7 @@ impl Recipient {
         spki: SubjectPublicKeyInfoRef<'_>,
         ek_pq: <MlKem768 as KemCore>::EncapsulationKey,
     ) -> Option<Self> {
-        let encoded = p256::EncodedPoint::from_bytes(spki.subject_public_key.as_bytes()).ok()?;
+        let encoded = p256::EncodedPoint::from_bytes(spki.subject_public_key.as_bytes()?).ok()?;
         let ek_t = p256::PublicKey::from_encoded_point(&encoded).into_option()?;
 
         Some(Self(kem::PublicKey { ek_pq, ek_t }))
