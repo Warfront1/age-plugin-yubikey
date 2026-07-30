@@ -4,6 +4,7 @@ use std::sync::RwLock;
 
 use hkdf::Hkdf;
 use sha2::Sha256;
+use subtle::{Choice, ConstantTimeEq};
 
 use crate::key::Connection;
 
@@ -41,10 +42,18 @@ impl<'a, Kem> Clone for YubiKeyKemPrivateKey<'a, Kem> {
 
 impl<'a, Kem> PartialEq for YubiKeyKemPrivateKey<'a, Kem> {
     fn eq(&self, other: &Self) -> bool {
-        self.conn.read().unwrap().stub() == other.conn.read().unwrap().stub()
+        self.ct_eq(other).into()
     }
 }
 impl<'a, Kem> Eq for YubiKeyKemPrivateKey<'a, Kem> {}
+
+impl<'a, Kem> ConstantTimeEq for YubiKeyKemPrivateKey<'a, Kem> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        let self_stub = self.conn.read().unwrap().stub();
+        let other_stub = other.conn.read().unwrap().stub();
+        self_stub.to_bytes()[..].ct_eq(&other_stub.to_bytes()[..])
+    }
+}
 
 impl<'a, Kem: hpke::Kem> hpke::Serializable for YubiKeyKemPrivateKey<'a, Kem> {
     type OutputSize = <Kem::PrivateKey as hpke::Serializable>::OutputSize;

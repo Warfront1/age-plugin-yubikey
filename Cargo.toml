@@ -22,8 +22,8 @@ assets = [
 ]
 
 [dependencies]
-age-core = "0.11"
-age-plugin = "0.6"
+age-core = "0.12"
+age-plugin = "0.7"
 base64 = "0.22"
 bech32 = "0.11"
 chrono = "0.4"
@@ -34,14 +34,14 @@ env_logger = "0.10"
 getrandom = { version = "0.4", features = ["sys_rng"] }
 gumdrop = "0.8"
 hex = "0.4"
-hkdf = "0.12"
-hpke = { version = "0.12", default-features = false, features = ["alloc", "p256"] }
+hkdf = "0.13"
+hpke = { version = "0.14", default-features = false, features = ["alloc", "chacha", "getrandom", "hkdfsha2", "nistp"] }
 log = "0.4"
-p256 = { version = "0.13", features = ["ecdh"] }
-p256_v0_14 = { package = "p256", version = "0.14", default-features = false, features = ["ecdsa"] }
+p256 = { version = "0.14", default-features = false, features = ["arithmetic", "ecdh", "ecdsa"] }
 pcsc = "2.4"
-rand = "0.8"
-sha2 = "0.10"
+rand = "0.10"
+sha2 = "0.11"
+subtle = "2"
 which = "5"
 x509-cert = "0.3"
 yubikey = { version = "=0.9.0-pre.0", features = ["untested"] }
@@ -63,5 +63,5 @@ test-with = "0.11"
 which = "5"
 
 [patch.crates-io]
-age-core = { git = "https://github.com/str4d/rage.git", rev = "e08c450aa5d7b1cc5706094080c0042ddd60aaf7" }
-age-plugin = { git = "https://github.com/str4d/rage.git", rev = "e08c450aa5d7b1cc5706094080c0042ddd60aaf7" }
+age-core = { git = "https://github.com/str4d/rage.git", rev = "f7c95f4c067049085944e914ef4e7321fe03e7b9" }
+age-plugin = { git = "https://github.com/str4d/rage.git", rev = "f7c95f4c067049085944e914ef4e7321fe03e7b9" }

@@ -150,7 +150,7 @@ impl IdentityBuilder {
         };
 
         // TODO: https://github.com/iqlusioninc/yubikey.rs/issues/581
-        let cert = Certificate::generate_self_signed::<_, p256_v0_14::NistP256>(
+        let cert = Certificate::generate_self_signed::<_, p256::NistP256>(
             yubikey,
             SlotId::Retired(slot),
             serial,

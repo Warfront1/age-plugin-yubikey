@@ -7,12 +7,10 @@ use age_core::{
     secrecy::{zeroize::Zeroize, ExposeSecret},
 };
 use base64::{prelude::BASE64_STANDARD_NO_PAD, Engine};
+use getrandom::{rand_core::UnwrapErr, SysRng};
+use hpke::kdf::Kdf;
 use hpke::{Deserializable, Serializable};
-use p256::{
-    elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint},
-    EncodedPoint,
-};
-use rand::rngs::OsRng;
+use p256::{elliptic_curve::sec1::ToSec1Point, Sec1Point};
 use x509_cert::spki::SubjectPublicKeyInfoRef;
 use yubikey::Certificate;
 
@@ -49,7 +47,7 @@ type Kem = hpke::kem::DhP256HkdfSha256;
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Recipient {
     /// Compressed encoding of the recipient public key.
-    compressed: EncodedPoint,
+    compressed: Sec1Point,
     /// Cached in-memory representation, for HPKE.
     pk_recip: <Kem as hpke::Kem>::PublicKey,
 }
@@ -69,15 +67,15 @@ impl fmt::Debug for Recipient {
 impl Recipient {
     /// Attempts to parse a valid p256tag recipient from its compressed SEC-1 byte encoding.
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        let encoded = p256::EncodedPoint::from_bytes(bytes).ok()?;
+        let encoded = Sec1Point::from_bytes(bytes).ok()?;
         if !encoded.is_compressed() {
             return None;
         }
 
-        let point = p256::PublicKey::from_encoded_point(&encoded).into_option()?;
+        let point = p256::PublicKey::from_sec1_bytes(encoded.as_bytes()).ok()?;
 
         let pk_recip =
-            <Kem as hpke::Kem>::PublicKey::from_bytes(point.to_encoded_point(false).as_bytes())
+            <Kem as hpke::Kem>::PublicKey::from_bytes(point.to_sec1_point(false).as_bytes())
                 .expect("valid");
 
         Some(Self {
@@ -91,13 +89,13 @@ impl Recipient {
     }
 
     pub(crate) fn from_spki(spki: SubjectPublicKeyInfoRef<'_>) -> Option<Self> {
-        let encoded = p256::EncodedPoint::from_bytes(spki.subject_public_key.as_bytes()?).ok()?;
-        let point = p256::PublicKey::from_encoded_point(&encoded).into_option()?;
+        let encoded = Sec1Point::from_bytes(spki.subject_public_key.as_bytes()?).ok()?;
+        let point = p256::PublicKey::from_sec1_bytes(encoded.as_bytes()).ok()?;
 
         // Enforce uncompressed encoding (HPKE).
         let pk_recip = <Kem as hpke::Kem>::PublicKey::from_bytes(encoded.as_bytes()).ok()?;
 
-        let compressed = point.to_encoded_point(true);
+        let compressed = point.to_sec1_point(true);
 
         Some(Self {
             compressed,
@@ -106,7 +104,7 @@ impl Recipient {
     }
 
     /// Returns the compressed SEC-1 encoding of this recipient.
-    pub(crate) fn to_compressed(&self) -> p256::EncodedPoint {
+    pub(crate) fn to_compressed(&self) -> Sec1Point {
         self.compressed
     }
 
@@ -119,7 +117,7 @@ impl Recipient {
             &self.pk_recip,
             P256TAG_SALT.as_bytes(),
             file_key.expose_secret(),
-            &mut OsRng,
+            &mut UnwrapErr(SysRng),
         );
 
         RecipientLine {
@@ -270,7 +268,7 @@ impl<'a> hpke::Kem for YubiKeyDhP256HkdfSha256<'a> {
         // output values are 255x the digest size of the hash function. Since these
         // values are fixed at compile time, we don't worry about it.
         let mut shared_secret = <hpke::kem::SharedSecret<Self> as Default>::default();
-        hpke::kdf::extract_and_expand::<hpke::kdf::HkdfSha256>(
+        hpke::kdf::HkdfSha256::extract_and_expand(
             &kex_res_eph,
             suite_id,
             &kem_context,
@@ -280,10 +278,10 @@ impl<'a> hpke::Kem for YubiKeyDhP256HkdfSha256<'a> {
         Ok(shared_secret)
     }
 
-    fn encap<R: rand::CryptoRng + rand::RngCore>(
+    fn encap_with_rng(
         _: &Self::PublicKey,
         _: Option<(&Self::PrivateKey, &Self::PublicKey)>,
-        _: &mut R,
+        _: &mut impl hpke::rand_core::CryptoRng,
     ) -> Result<(hpke::kem::SharedSecret<Self>, Self::EncappedKey), hpke::HpkeError> {
         unreachable!("Never called")
     }
