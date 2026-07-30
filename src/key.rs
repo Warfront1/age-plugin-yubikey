@@ -555,7 +555,7 @@ impl Stub {
         })
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(9);
         bytes.extend_from_slice(&self.serial.0.to_le_bytes());
         bytes.push(self.slot.into());
