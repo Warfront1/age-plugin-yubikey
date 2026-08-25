@@ -19,7 +19,7 @@ to 0.3.0 are beta releases.
 - `-t/--type` flag, to generate a specific identity type.
 
 ### Changed
-- MSRV is now 1.74.0.
+- MSRV is now 1.85.0.
 - The default generated identity type is now the native hybrid tagged recipient
   type (`age1tagpq1..`).
 - Encryption to an identity now uses the preferred recipient type supported for
