@@ -13,7 +13,7 @@ use rand::rngs::OsRng;
 use typenum::Unsigned;
 use const_oid::ObjectIdentifier;
 use x509_cert::{
-    der::{asn1::OctetString, Decode},
+    der::{asn1::OctetString, Decode, Encode},
     ext::Extension,
     spki::SubjectPublicKeyInfoRef,
 };
@@ -71,7 +71,11 @@ pub(crate) fn encode_ml_kem_768_seed<T>(
     dk_seed: &[u8; 64],
     f: impl FnOnce(Extension) -> T,
 ) -> T {
-    let extn_value = OctetString::new(dk_seed.to_vec()).expect("valid");
+    let inner = OctetString::new(dk_seed.to_vec())
+        .expect("valid")
+        .to_der()
+        .expect("can DER-encode");
+    let extn_value = OctetString::new(inner).expect("valid");
     f(Extension {
         extn_id: ML_KEM_768_SEED_EXTENSION_OID,
         critical: true,
