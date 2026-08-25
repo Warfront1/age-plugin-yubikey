@@ -6,9 +6,12 @@ use age_plugin::{identity, Callbacks};
 use dialoguer::Password;
 use log::{debug, error, warn};
 use std::convert::Infallible;
+use std::env;
 use std::fmt;
-use std::io;
+use std::io::{self, Read, Write};
 use std::iter;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime};
 use x509_parser::der_parser::oid::Oid;
@@ -260,6 +263,67 @@ pub(crate) fn open(serial: Option<Serial>) -> Result<YubiKey, Error> {
     Ok(yubikey)
 }
 
+/// Sends a request to the SSH agent to trigger reconnection to the YubiKey.
+///
+/// This function sends an `SSH_AGENTC_REQUEST_IDENTITIES` (opcode 11) message to the
+/// SSH agent socket specified by the `SSH_AUTH_SOCK` environment variable. This triggers
+/// agents like `yubikey-agent` to reconnect to the YubiKey on-demand, preserving PIN
+/// cache state.
+///
+/// All errors are silently ignored to avoid affecting the main encryption/decryption
+/// workflow.
+#[cfg(unix)]
+fn poke_ssh_agent() {
+    // Get SSH_AUTH_SOCK; silently return if not set
+    let socket_path = match env::var("SSH_AUTH_SOCK") {
+        Ok(path) if !path.is_empty() => path,
+        _ => return,
+    };
+
+    // Connect to the SSH agent socket
+    let mut stream = match UnixStream::connect(&socket_path) {
+        Ok(s) => s,
+        Err(e) => {
+            debug!("Failed to connect to SSH agent socket: {}", e);
+            return;
+        }
+    };
+
+    // Set a short timeout to avoid blocking
+    let timeout = Some(Duration::from_secs(1));
+    let _ = stream.set_read_timeout(timeout);
+    let _ = stream.set_write_timeout(timeout);
+
+    // SSH_AGENTC_REQUEST_IDENTITIES message:
+    // - 4 bytes: message length (big-endian) = 1
+    // - 1 byte: message type = 11 (SSH_AGENTC_REQUEST_IDENTITIES)
+    const SSH_AGENTC_REQUEST_IDENTITIES: [u8; 5] = [0, 0, 0, 1, 11];
+
+    if let Err(e) = stream.write_all(&SSH_AGENTC_REQUEST_IDENTITIES) {
+        debug!("Failed to send request to SSH agent: {}", e);
+        return;
+    }
+
+    // Read and discard the response (we don't need the identities list)
+    // Response format: 4-byte length + message body
+    let mut length_buf = [0u8; 4];
+    if stream.read_exact(&mut length_buf).is_ok() {
+        let length = u32::from_be_bytes(length_buf) as usize;
+        // Limit read to prevent memory issues with malformed responses
+        if length <= 64 * 1024 {
+            let mut response = vec![0u8; length];
+            let _ = stream.read_exact(&mut response);
+        }
+    }
+
+    debug!("Sent reconnection trigger to SSH agent at {}", socket_path);
+}
+
+#[cfg(not(unix))]
+fn poke_ssh_agent() {
+    // SSH agent socket communication is Unix-specific
+}
+
 /// Disconnect from the YubiKey without resetting it.
 ///
 /// This can be used to preserve the YubiKey's PIN and touch caches. There are two cases
@@ -273,8 +337,13 @@ pub(crate) fn open(serial: Option<Serial>) -> Result<YubiKey, Error> {
 ///   YubiKey's state were to potentially cache the PIN and/or touch (depending on the
 ///   policies of the slot). We want to allow these to persist beyond our execution, for
 ///   usability.
+///
+/// After releasing the YubiKey, this function also sends a request to the SSH agent
+/// (if available) to trigger reconnection, allowing agents like `yubikey-agent` to
+/// reclaim the device and preserve PIN cache state.
 pub(crate) fn disconnect_without_reset(yubikey: YubiKey) {
     let _ = yubikey.disconnect(pcsc::Disposition::LeaveCard);
+    poke_ssh_agent();
 }
 
 fn request_pin<E, E2>(
